@@ -1,4 +1,5 @@
-import { computed, effect, Injectable, signal } from '@angular/core';
+import { Injectable } from '@angular/core';
+import { BehaviorSubject, Observable, combineLatest, map } from 'rxjs';
 
 import { Product } from '../products/product';
 import { CartItem } from './cart-item';
@@ -8,43 +9,63 @@ import { CartItem } from './cart-item';
 })
 export class CartService {
 
-  cartItems = signal<CartItem[]>([]);
+  private cartItems: CartItem[] = [];
+  private cartItems$ = new BehaviorSubject<CartItem[]>(this.cartItems);
 
-  cartCount = computed(() => this.cartItems().reduce((acc, curr) => acc + curr.quantity, 0));
+  cartCount$ = this.cartItems$.pipe(
+    // calculate total quantity
+    map((items: CartItem[]) => {
+      return items.reduce((acc, curr) => acc + curr.quantity, 0);
+    })
+  );
 
-  cartSubTotal = computed(() => this.cartItems().reduce((acc, curr) => acc + (curr.quantity * curr.product.price), 0));
+  cartSubTotal$ = this.cartItems$.pipe(
+    map((items: CartItem[]) =>
+      items.reduce((acc, curr) => acc + (curr.quantity * curr.product.price), 0))
+  );
 
-  // calculate tax of 8% on top of the subtotal
-  cartTax = computed(() => this.cartSubTotal() * 0.08);
+  cartTax$ = this.cartSubTotal$.pipe(
+    // calculate tax of 8% on top of the subtotal
+    map((subTotal) => subTotal * 0.08)
+  );
 
-  cartTotal = computed(() => this.cartSubTotal() + this.cartTax());
+  cartTotal$ = combineLatest([
+    this.cartSubTotal$,
+    this.cartTax$
+  ]).pipe(map(([subTotal, tax]) => subTotal + tax));
 
-  e = effect(() => console.log('cartCount updated', this.cartCount()));
-  i = effect(() => console.log('cartItems updated', this.cartItems()));
 
+  getCartItems(): Observable<CartItem[]> {
+    return this.cartItems$.asObservable();
+  }
 
   addProduct(product: Product): void {
-    const indexFound = this.cartItems().findIndex((p) => p.product.id === product.id);
-    if (indexFound >= 0) {
-      const cartItem = this.cartItems()[indexFound];
-      cartItem.quantity += 1;
-      this.updateCartQuantity(cartItem);
-      //this.cartItems.mutate((items) => items[indexFound].quantity += 1);
+    const itemFound = this.cartItems.find((p) => p.product.id === product.id);
+    if (itemFound) {
+      itemFound.quantity += 1;
     } else {
-      //this.cartItems.mutate((items) => items.push({ product, quantity: 1 }));
-      this.cartItems.update((items) => [...items, { product, quantity: 1 }]);
+      this.cartItems.push({ product, quantity: 1 });
     }
+
+    this.updateCartItems();
+  }
+
+
+  private updateCartItems(): void {
+    this.cartItems$.next(this.cartItems);
   }
 
   updateCartQuantity(cartItem: CartItem): void {
-    const indexFound = this.cartItems().findIndex((p) => p.product.id === cartItem.product.id);
-    if (indexFound >= 0) {
-      this.cartItems.update((items) => items.map((p) => p.product.id === cartItem.product.id ? cartItem : p));
+    const itemFound = this.cartItems.find((p) => p.product.id === cartItem.product.id);
+    if (itemFound) {
+      itemFound.quantity = cartItem.quantity;
     }
+    this.updateCartItems();
   }
 
   removeProduct(product: Product): void {
-    this.cartItems.update((items) => items.filter((p) => p.product.id !== product.id));
+    this.cartItems = this.cartItems.filter((p) => p.product.id !== product.id);
+    this.updateCartItems();
   }
 
 }

@@ -8,8 +8,8 @@ describe('CartTotalSummaryComponent', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-    imports: [CartTotalSummaryComponent]
-});
+      declarations: [CartTotalSummaryComponent]
+    });
     fixture = TestBed.createComponent(CartTotalSummaryComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
